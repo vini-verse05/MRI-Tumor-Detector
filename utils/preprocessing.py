@@ -4,7 +4,6 @@
 import os
 import cv2
 import numpy as np
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 # ── Constants ──────────────────────────────────────────────────
 IMG_SIZE   = 224        # ResNet50 expects 224x224 pixels
@@ -39,6 +38,7 @@ def preprocess_single_image(image_path):
 
 
 def get_data_generators():
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
     """
     Create training and validation data generators with augmentation.
     """
