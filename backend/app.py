@@ -19,6 +19,7 @@ sys.path.append(BASE_DIR)
 
 from utils.preprocessing import preprocess_single_image
 from security.aes_encryption import encrypt_image, decrypt_image
+from explainability.gradcam import get_gradcam_heatmap, save_gradcam_image
 
 # ── App Configuration ──────────────────────────────────────────
 app = Flask(
@@ -37,26 +38,33 @@ UPLOAD_FOLDER   = os.path.join(TMP_DIR, 'encrypted_images')
 HEATMAP_DIR     = os.path.join(TMP_DIR, 'heatmaps')
 TEMP_DIR        = os.path.join(TMP_DIR, 'temp')
 ALLOWED_EXT     = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
-MODEL_PATH      = os.path.join(BASE_DIR, 'model', 'brain_tumor_model.tflite')
+TFLITE_MODEL_PATH = os.path.join(BASE_DIR, 'model', 'brain_tumor_model.tflite')
+KERAS_MODEL_PATH  = os.path.join(BASE_DIR, 'model', 'brain_tumor_model.h5')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(HEATMAP_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 # ── Simple User Database ───────────────────────────────────────
-# In production: use a real database (PostgreSQL, MongoDB, etc.)
 USERS = {
     'doctor1': generate_password_hash('secure123'),
     'admin'  : generate_password_hash('admin456'),
 }
 
-# ── Load TFLite Model at Startup ──────────────────────────────
+# ── Load TFLite model for fast inference ──────────────────────
 print('Loading TFLite model...')
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter = tf.lite.Interpreter(model_path=TFLITE_MODEL_PATH)
 interpreter.allocate_tensors()
 input_details  = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
-print('TFLite model loaded successfully!')
+print('TFLite model loaded!')
+
+# ── Load Keras model for Grad-CAM ─────────────────────────────
+print('Loading Keras model for Grad-CAM...')
+keras_model = tf.keras.models.load_model(KERAS_MODEL_PATH)
+dummy = np.zeros((1, 224, 224, 3))
+_ = keras_model(dummy)
+print('Keras model loaded!')
 
 
 def allowed_file(filename):
@@ -171,7 +179,12 @@ def predict():
             confidence = (1 - float(raw_pred)) * 100
             message    = 'Possible tumor detected. Consult a specialist.'
 
-        # Step 6: Cleanup temp files
+        # Step 6: Grad-CAM heatmap
+        heatmap          = get_gradcam_heatmap(keras_model, img_array)
+        heatmap_filename = f'heatmap_{unique_id}.png'
+        save_gradcam_image(dec_temp, heatmap, heatmap_filename, HEATMAP_DIR)
+
+        # Step 7: Cleanup temp files
         for path in [temp_path, dec_temp]:
             if path and os.path.exists(path):
                 os.remove(path)
@@ -181,6 +194,7 @@ def predict():
             'prediction'     : label,
             'confidence'     : round(confidence, 2),
             'message'        : message,
+            'heatmap_url'    : f'/heatmaps/{heatmap_filename}',
             'encrypted_file' : enc_filename,
             'patient_id'     : unique_id
         })

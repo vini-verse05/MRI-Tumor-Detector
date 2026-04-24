@@ -3,7 +3,7 @@ import tensorflow as tf
 model = tf.keras.models.load_model('model/brain_tumor_model.h5')
 
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.DEFAULT]  # quantization reduces size further
+# No quantization — preserve float32 precision for medical accuracy
 tflite_model = converter.convert()
 
 with open('model/brain_tumor_model.tflite', 'wb') as f:
