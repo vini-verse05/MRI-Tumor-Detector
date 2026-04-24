@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Medical AI - Diagnosis</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: linear-gradient(135deg, #eaf3fb, #f7fbff);
+        margin: 0;
+      }
+
+      .navbar {
+        background: #1f4e79;
+        color: white;
+        padding: 15px 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 15px;
+      }
+
+      .navbar a {
+        color: #90caf9;
+        text-decoration: none;
+      }
+
+      .container {
+        max-width: 1300px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+
+      .card {
+        background: white;
+        padding: 30px;
+        border-radius: 14px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+        margin-bottom: 25px;
+      }
+
+      h3 {
+        color: #1f4e79;
+        margin-top: 0;
+      }
+
+      /* Upload area */
+      .upload-area {
+        border: 2px dashed #2e75b6;
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        background: #f4f9ff;
+        transition: 0.2s;
+      }
+
+      .upload-area:hover {
+        background: #e6f0fb;
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      #file-name {
+        font-size: 13px;
+        color: #666;
+        margin-top: 8px;
+      }
+
+      /* Button */
+      button {
+        background: linear-gradient(135deg, #1f4e79, #2e75b6);
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 15px;
+        font-size: 15px;
+        transition: 0.2s;
+      }
+
+      button:hover {
+        transform: scale(1.05);
+      }
+
+      button:disabled {
+        background: #aaa;
+        cursor: not-allowed;
+      }
+
+      /* Loading */
+      #loading {
+        display: none;
+        margin-top: 15px;
+      }
+
+      .spinner {
+        border: 4px solid #eee;
+        border-top: 4px solid #1f4e79;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: auto;
+      }
+
+      @keyframes spin {
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Result */
+      #result {
+        display: none;
+      }
+
+      .pred-healthy {
+        background: #d4edda;
+        color: #155724;
+        padding: 16px;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: bold;
+        text-align: center;
+      }
+
+      .pred-diseased {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 16px;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: bold;
+        text-align: center;
+      }
+
+      .meta {
+        text-align: center;
+        color: #555;
+        margin-top: 8px;
+      }
+
+      /* Confidence bar */
+      .bar-container {
+        background: #eee;
+        border-radius: 6px;
+        overflow: hidden;
+        margin-top: 10px;
+      }
+
+      .bar {
+        height: 12px;
+        background: #2e75b6;
+        width: 0%;
+        transition: 0.5s;
+      }
+
+      /* Image section */
+      .image-container {
+        margin-top: 25px;
+        text-align: center;
+      }
+
+      .image-container img {
+        width: 100%;
+        max-width: 1100px;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+      }
+
+      .note {
+        text-align: center;
+        font-size: 12px;
+        color: #888;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="navbar">
+      <span>🧠 Medical AI Diagnosis</span>
+      <span>Dr. {{ username }} | <a href="/logout">Logout</a></span>
+    </div>
+
+    <div class="container">
+      <!-- Upload -->
+      <div class="card">
+        <h3>Upload Brain MRI</h3>
+
+        <div class="upload-area" onclick="fileInput.click()">
+          📂 Click to select MRI image
+          <input
+            type="file"
+            id="fileInput"
+            accept="image/*"
+            onchange="fileName.textContent = this.files[0]?.name || ''"
+          />
+          <div id="fileName">No file selected</div>
+        </div>
+
+        <button onclick="predict()" id="btn">🔍 Analyze MRI</button>
+
+        <div id="loading">
+          <div class="spinner"></div>
+          <p style="text-align: center">Processing...</p>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div class="card" id="result">
+        <h3>Diagnosis Result</h3>
+
+        <div id="predBox"></div>
+
+        <p id="msgText" class="meta"></p>
+        <p id="confText" class="meta"></p>
+
+        <!-- Confidence bar -->
+        <div class="bar-container">
+          <div id="confBar" class="bar"></div>
+        </div>
+
+        <!-- Heatmap -->
+        <div class="image-container">
+          <img id="heatmapImg" />
+        </div>
+
+        <p class="note">
+          🔴 Highlighted regions indicate areas influencing AI prediction
+        </p>
+      </div>
+    </div>
+
+    <script>
+      async function predict() {
+        const fileInput = document.getElementById("fileInput");
+
+        if (!fileInput.files.length) {
+          alert("Select an image first");
+          return;
+        }
+
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("result").style.display = "none";
+        document.getElementById("btn").disabled = true;
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        try {
+          const res = await fetch("/predict", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("btn").disabled = false;
+
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+
+          document.getElementById("result").style.display = "block";
+
+          const box = document.getElementById("predBox");
+          box.className =
+            data.prediction === "Healthy" ? "pred-healthy" : "pred-diseased";
+          box.textContent = data.prediction;
+
+          document.getElementById("msgText").innerText = data.message;
+          document.getElementById("confText").innerText =
+            "Confidence: " + data.confidence + "%";
+
+          document.getElementById("confBar").style.width =
+            data.confidence + "%";
+
+          const img = document.getElementById("heatmapImg");
+          img.src = data.heatmap_url + "?t=" + new Date().getTime();
+        } catch (err) {
+          alert("Error: " + err.message);
+        }
+      }
+    </script>
+  </body>
+</html>

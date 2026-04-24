@@ -1,0 +1,78 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ========================
+# Virtual Environments
+# ========================
+venv/
+env/
+.venv/
+ENV/
+
+# ========================
+# System Files
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# IDE / Editor
+# ========================
+.vscode/
+.idea/
+
+# ========================
+# Environment Variables / Secrets
+# ========================
+.env
+
+# ========================
+# Machine Learning Models
+# ========================
+# Uncomment the line below if you want to exclude models from git
+# For Render deployment, you need to either:
+# 1. Remove *.h5 from gitignore and commit the model, OR
+# 2. Use Git LFS for large files, OR  
+# 3. Download model from external storage (S3, Google Drive) at startup
+# *.h5
+*.keras
+*.pt
+*.pth
+
+# ========================
+# Dataset / Data Files
+# ========================
+dataset/
+data/
+*.zip
+*.csv
+
+# ========================
+# Generated / Runtime Files
+# ========================
+temp/
+encrypted_images/
+backend/static/heatmaps/
+*.log
+
+# ========================
+# Flask
+# ========================
+instance/
+.webassets-cache
+
+# ========================
+# Jupyter (if used)
+# ========================
+.ipynb_checkpoints/
+
+# ========================
+# OS / Misc
+# ========================
+*.swp
+*.swo
