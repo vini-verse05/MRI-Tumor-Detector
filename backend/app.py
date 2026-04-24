@@ -12,14 +12,13 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 
 from utils.preprocessing import preprocess_single_image
 from security.aes_encryption import encrypt_image, decrypt_image
-from explainability.gradcam import get_gradcam_heatmap, save_gradcam_image
 
 # ── App Configuration ──────────────────────────────────────────
 app = Flask(
@@ -38,8 +37,7 @@ UPLOAD_FOLDER   = os.path.join(TMP_DIR, 'encrypted_images')
 HEATMAP_DIR     = os.path.join(TMP_DIR, 'heatmaps')
 TEMP_DIR        = os.path.join(TMP_DIR, 'temp')
 ALLOWED_EXT     = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
-MODEL_PATH      = os.path.join(BASE_DIR, 'model', 'brain_tumor_model.h5')
-LAST_CONV_LAYER = 'resnet50'
+MODEL_PATH      = os.path.join(BASE_DIR, 'model', 'brain_tumor_model.tflite')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(HEATMAP_DIR, exist_ok=True)
@@ -52,18 +50,13 @@ USERS = {
     'admin'  : generate_password_hash('admin456'),
 }
 
-# ── Load Model at Startup ──────────────────────────────────────
-print('Loading trained model...')
-model = tf.keras.models.load_model(MODEL_PATH)
-
-if not model.built:
-    model.build((None, 224, 224, 3))
-
-# ✅ Force build with correct shape
-dummy_input = np.zeros((1, 224, 224, 3))
-_ = model(dummy_input)
-
-print('Model loaded successfully!')
+# ── Load TFLite Model at Startup ──────────────────────────────
+print('Loading TFLite model...')
+interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+input_details  = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+print('TFLite model loaded successfully!')
 
 
 def allowed_file(filename):
@@ -162,29 +155,23 @@ def predict():
         decrypt_image(encrypted_path, dec_temp)
 
         # Step 5: Preprocess & predict
-        img_array = preprocess_single_image(dec_temp)
-        raw_pred  = model.predict(img_array, verbose=0)[0][0]
-        print("RAW PREDICTION:", raw_pred)
+        img_array = preprocess_single_image(dec_temp).astype(np.float32)
+        interpreter.set_tensor(input_details[0]['index'], img_array)
+        interpreter.invoke()
+        raw_pred = interpreter.get_tensor(output_details[0]['index'])[0][0]
+        print('RAW PREDICTION:', raw_pred)
 
-        # Interpret sigmoid output:
-        # >= 0.5 → Healthy (class 1), < 0.5 → Diseased (class 0)
-        THRESHOLD = 0.4   # 🔥 adjust based on bias
-
+        THRESHOLD = 0.4
         if raw_pred >= THRESHOLD:
-            label = 'Healthy'
-            confidence = float(raw_pred) * 100   # 🔥 FIX
-            message = 'No tumor detected. Routine check recommended.'
+            label      = 'Healthy'
+            confidence = float(raw_pred) * 100
+            message    = 'No tumor detected. Routine check recommended.'
         else:
-            label = 'Diseased'
-            confidence = (1 - float(raw_pred)) * 100   # 🔥 FIX
-            message = 'Possible tumor detected. Consult a specialist.'
+            label      = 'Diseased'
+            confidence = (1 - float(raw_pred)) * 100
+            message    = 'Possible tumor detected. Consult a specialist.'
 
-        # Step 6: Generate Grad-CAM heatmap
-        heatmap          = get_gradcam_heatmap(model, img_array, LAST_CONV_LAYER)
-        heatmap_filename = f'heatmap_{unique_id}.png'
-        save_gradcam_image(dec_temp, heatmap, heatmap_filename, HEATMAP_DIR)
-
-        # Step 7: Cleanup temp files
+        # Step 6: Cleanup temp files
         for path in [temp_path, dec_temp]:
             if path and os.path.exists(path):
                 os.remove(path)
@@ -194,7 +181,6 @@ def predict():
             'prediction'     : label,
             'confidence'     : round(confidence, 2),
             'message'        : message,
-            'heatmap_url'    : f'/heatmaps/{heatmap_filename}',
             'encrypted_file' : enc_filename,
             'patient_id'     : unique_id
         })
