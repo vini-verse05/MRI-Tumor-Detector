@@ -230,14 +230,7 @@
           <div id="confBar" class="bar"></div>
         </div>
 
-        <!-- Heatmap -->
-        <div class="image-container">
-          <img id="heatmapImg" />
-        </div>
 
-        <p class="note">
-          🔴 Highlighted regions indicate areas influencing AI prediction
-        </p>
 
       </div>
     </div>
@@ -287,9 +280,6 @@
 
           document.getElementById("confBar").style.width =
             data.confidence + "%";
-
-          const img = document.getElementById("heatmapImg");
-          img.src = data.heatmap_url + "?t=" + new Date().getTime();
         } catch (err) {
           alert("Error: " + err.message);
         }
